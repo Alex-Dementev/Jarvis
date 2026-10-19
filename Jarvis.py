@@ -12,13 +12,13 @@ from rapidfuzz import process, fuzz
 # Инициализируем аудиоплеер
 pygame.mixer.init()
 
-MODEL_PATH = "LanguageModel"
+MODEL_PATH = os.path.join("LanguageModels", "Language_Model_Ru")
 
 print("Загрузка Vosk...")
 model = vosk.Model(MODEL_PATH)
 recognizer = vosk.KaldiRecognizer(model, 16000)
 
-WAKE_WORDS = ["джарвис", "джервис", "жарвис"]
+WAKE_WORDS = ["джарвис", "джервис", "жарвис", "Jarvis"]
 
 RESPONSES = {
     1: "Да, сэр?",
@@ -29,7 +29,6 @@ RESPONSES = {
 used_numbers = []
 used_dont_numbers = []
 
-# --- Переменные состояния ---
 STATE_WAITING_WAKE = "WAITING_WAKE"
 STATE_LISTENING_CMD = "LISTENING_CMD"
 
@@ -37,11 +36,9 @@ current_state = STATE_WAITING_WAKE
 last_speech_time = 0.0
 command_buffer = []
 
-# Флаг: говорит ли Джарвис прямо сейчас (чтобы не слушать самого себя)
 is_speaking = False
 
 def play_audio_file(file_path: str):
-    """Воспроизведение любого аудиофайла с блокировкой микрофона."""
     global is_speaking
 
     if not os.path.exists(file_path):
@@ -53,7 +50,7 @@ def play_audio_file(file_path: str):
         return
 
     try:
-        is_speaking = True  # Игнорируем микрофон, пока Джарвис говорит
+        is_speaking = True
         pygame.mixer.music.load(file_path)
         pygame.mixer.music.play()
         
@@ -63,7 +60,7 @@ def play_audio_file(file_path: str):
     except Exception as e:
         print(f"[Ошибка воспроизведения]: {e}")
     finally:
-        is_speaking = False  # Включаем слух обратно
+        is_speaking = False
 
 def get_unique_random_number() -> int:
     available = [num for num in range(1, 4) if num not in used_numbers]
@@ -76,7 +73,6 @@ def get_unique_random_number() -> int:
     return chosen
 
 def play_dont_response():
-    """Чередует файлы Dont1 и Dont2 из папки Audios/Dont."""
     available = [num for num in [1, 2] if num not in used_dont_numbers]
     chosen = random.choice(available)
     
@@ -117,7 +113,6 @@ def clean_wake_words(text: str) -> str:
 def audio_callback(indata, frames, time_info, status):
     global current_state, last_speech_time, command_buffer, is_speaking
 
-    # Если Джарвис говорит — полностью игнорируем входящее аудио
     if is_speaking:
         return
 
@@ -131,7 +126,6 @@ def audio_callback(indata, frames, time_info, status):
             partial = json.loads(recognizer.PartialResult())
             text = partial.get("partial", "").lower().strip()
     except Exception as e:
-        # При любой ошибке распознавания безопасно перезапускаем декодер
         try:
             recognizer.Reset()
         except Exception:
@@ -141,27 +135,22 @@ def audio_callback(indata, frames, time_info, status):
     if not text:
         return
 
-    # 1. Ожидаем слово "Джарвис"
     if current_state == STATE_WAITING_WAKE:
         if is_wake_word(text):
             num = get_unique_random_number()
             phrase = RESPONSES[num]
             print(f"\nДЖАРВИС: {phrase}\n")
             
-            # Включаем флаг речи ДО вызова звука и сброса, 
-            # чтобы audio_callback сразу прекратил обработку новых байтов
             is_speaking = True 
             
-            play_audio_response(num) # Внутри сам сбросит is_speaking в False в блоке finally
+            play_audio_response(num)
             
-            # Сбрасываем распознаватель ОДИН раз после того, как отговорили
             recognizer.Reset()
             
             current_state = STATE_LISTENING_CMD
             last_speech_time = time.time() + 3.0
             command_buffer = []
 
-    # 2. Слушаем команду
     elif current_state == STATE_LISTENING_CMD:
         clean_text = clean_wake_words(text)
         if clean_text:
@@ -171,13 +160,13 @@ def audio_callback(indata, frames, time_info, status):
 
 print("\n=== Джарвис ===")
 
-with sd.RawInputStream(samplerate=16000, blocksize=800, dtype='int16', channels=1, callback=audio_callback):
+with sd.RawInputStream(samplerate=16000, blocksize=1200, dtype='int16', channels=1, callback=audio_callback):
     while True:
         if current_state == STATE_LISTENING_CMD:
             full_user_command = " ".join(command_buffer).strip() if command_buffer else ""
             word_count = len(full_user_command.split()) if full_user_command else 0
             
-            pause_timeout = 0.2 if word_count < 4 else 0.35
+            pause_timeout = 0.25 if word_count < 4 else 0.4
             
             if time.time() - last_speech_time > pause_timeout:
                 if command_buffer:
@@ -186,15 +175,13 @@ with sd.RawInputStream(samplerate=16000, blocksize=800, dtype='int16', channels=
                     is_handled = Commands.process_command(full_user_command)
     
                     if not is_handled:
-                        Submission.process_submission(full_user_command)
+                        Submission.process_submission(full_user_command, "")
                 else:
                     play_dont_response()
                 
-                # Возвращаемся в режим ожидания
                 current_state = STATE_WAITING_WAKE
                 command_buffer = []
                 
-                # Очищаем буфер Vosk безопасно
                 is_speaking = True
                 recognizer.Reset()
                 is_speaking = False

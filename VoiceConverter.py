@@ -30,18 +30,6 @@ class VoiceConverter:
 
         # 2. Инициализация RVC (если библиотека доступна)
         self.has_rvc = False
-        try:
-            from rvc_python.infer import RVCInference
-
-            if os.path.exists(RVC_MODEL):
-                print("[VoiceConverter]: Загрузка модели RVC (VoiceJarvis)...")
-                self.rvc = RVCInference(device="cuda:0")
-                self.rvc.load_model(RVC_MODEL)
-                if os.path.exists(RVC_INDEX):
-                    self.rvc.set_index(RVC_INDEX)
-                self.has_rvc = True
-        except Exception as e:
-            print(f"[VoiceConverter Info]: RVC не используется/не доступен ({e}). Использование базового Piper TTS.")
 
     def _boost_bass_and_clarity(self, data: np.ndarray, rate: int) -> np.ndarray:
         """Усиливает низкие и высокие частоты."""

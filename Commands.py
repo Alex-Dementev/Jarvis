@@ -1,14 +1,30 @@
-import os
-import time
-import subprocess
-import pygame
-import psutil
-import psutil
-import GPUtil
 import ctypes
+import base64
+from datetime import datetime
+import os
 import shutil
+import subprocess
+import time
+import GPUtil
+import psutil
+import pygame
 from VoiceConverter import VoiceConverter
 from datetime import datetime
+
+try:
+    import screen_brightness_control as sbc
+
+    HAS_BRIGHTNESS = True
+except Exception:
+    HAS_BRIGHTNESS = False
+
+try:
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+
+    HAS_VOLUME = True
+except Exception:
+    HAS_VOLUME = False
 
 SOUNDS_DIR = os.path.join("Audios", "LocalCommands")
 
@@ -54,6 +70,30 @@ def plural_form(number, singular_nom, singular_gen, plural_gen):
         return singular_nom
     return plural_gen
 
+def run_powershell(command: str) -> str:
+    encoded = base64.b64encode(command.encode("utf-16le")).decode("ascii")
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10
+        )
+        return (res.stdout or "").strip()
+    except Exception as e:
+        return f"Ошибка: {e}"
+
+def change_volume_ps(direction: str, steps: int = 3):
+    key_code = 175 if direction == "up" else 174
+    script = f"$obj = New-Object -ComObject WScript.Shell; for($i=0; $i -lt {steps}; $i++){{$obj.SendKeys([char]{key_code})}}"
+    run_powershell(script)
+
+def change_brightness_ps(step: int):
+    script = f"(Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, (Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightness).CurrentBrightness + ({step}))"
+    run_powershell(script)
+
 def get_system_status() -> str:
     cpu_usage = int(psutil.cpu_percent(interval=0.5))
     ram_usage = int(psutil.virtual_memory().percent)
@@ -98,12 +138,15 @@ def process_command(text: str) -> bool:
     words = text_lower.split()
     word_count = len(words)
 
-    if word_count > 6: return False
+    if word_count > 6: 
+        play_sound("unknown_command")
+        print("ДЖАРВИС: Мне нужно подумать, сэр!\n")
+        return False
 
 
 
 
-    if "открой" in text_lower or "запусти" in text_lower and word_count < 4:
+    if "открой" in text_lower and word_count < 4 or "запусти" in text_lower and word_count < 4:
         if "калькулятор" in text_lower:
             print("ДЖАРВИС: Калькулятор запущен, сэр!")
             subprocess.Popen("calc.exe")
@@ -114,9 +157,14 @@ def process_command(text: str) -> bool:
             subprocess.Popen("start cmd.exe", shell=True)
             play_sound("command_prompt_opened")
             return True
+        elif "диспетчер задач" in text_lower:
+            print("ДЖАРВИС: Диспетчер задач запущен, сэр!")
+            ctypes.windll.shell32.ShellExecuteW(None, "runas", "taskmgr.exe", None, None, 1)
+            play_sound("taskmgr_opened")
+            return True
         
 
-    if "закрой" in text_lower or "выключи" in text_lower and word_count < 4:
+    if "закрой" in text_lower and word_count < 4 or "выключи" in text_lower and word_count < 4:
         if "калькулятор" in text_lower:
             print("ДЖАРВИС: Калькулятор закрыт, сэр!")
             subprocess.run("taskkill /f /im CalculatorApp.exe", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -127,6 +175,11 @@ def process_command(text: str) -> bool:
             print("ДЖАРВИС: Командная строка закрыта, сэр!")
             subprocess.run("taskkill /f /im cmd.exe", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             play_sound("command_prompt_closed")
+            return True
+        elif "диспетчер задач" in text_lower:
+            print("ДЖАРВИС: Диспетчер задач закрыт, сэр!")
+            subprocess.run('powershell -command "Stop-Process -Name Taskmgr -Force"', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            play_sound("taskmgr_closed")
             return True
     
 
@@ -180,7 +233,7 @@ def process_command(text: str) -> bool:
             play_sound("sleep_mode_1")
             ctypes.windll.PowrProf.SetSuspendState(0, 0, 0)
             return True
-        elif "спокойной ночи" in text_lower or "доброй ночи" in text_lower:
+        elif "спокойной ночи" in text_lower or "доброй ночи" in text_lower or "покойной ночи" in text_lower:
             print(f"ДЖАРВИС: Дристать вам пол ночи, Сэр!\n")
             play_sound("sleep_mode_2")
             ctypes.windll.PowrProf.SetSuspendState(0, 0, 0)
@@ -193,6 +246,43 @@ def process_command(text: str) -> bool:
                 print(f"ДЖАRВИС: На диске C: свободно {free_gbC} гигабайт. На диске D: свободно {free_gbD} гигабайт.")
                 Voice.speak(f"На диске C: свободно {free_gbC} гигабайт. На диске D: свободно {free_gbD} гигабайт.")
                 return True
+
+
+    if ("громче" in text_lower or "погромче" in text_lower or "прибавь звук" in text_lower or "увеличь громкость" in text_lower) and word_count < 5:
+        print("ДЖАРВИС: Делаю громче, сэр!")
+        change_volume_ps("up", steps=5)
+        play_sound("volume_up")
+        return True
+
+    if ("тише" in text_lower or "потише" in text_lower or "убавь звук" in text_lower or "уменьши громкость" in text_lower) and word_count < 5:
+        print("ДЖАРВИС: Делаю тише, сэр!")
+        change_volume_ps("down", steps=5)
+        play_sound("volume_down")
+        return True
+
+    if ("светлее" in text_lower or "ярче" in text_lower or "прибавь яркость" in text_lower or "увеличь яркость" in text_lower) and word_count < 5:
+        print("ДЖАРВИС: Увеличиваю яркость, сэр!")
+        change_brightness_ps(40)
+        play_sound("brightness_up")
+        return True
+
+    if ("тускнее" in text_lower or "тусклее" in text_lower or "темнее" in text_lower or "убавь яркость" in text_lower or "уменьши яркость" in text_lower) and word_count < 5:
+        print("ДЖАРВИС: Уменьшаю яркость, сэр!")
+        change_brightness_ps(-40)
+        play_sound("brightness_down")
+        return True
+
+
+    if ("скрою" in text_lower or "скрой" in text_lower or "сверни" in text_lower) and "окна" in text_lower and word_count < 5:
+        print("ДЖАРВИС: Сворачиваю все окна, сэр!")
+        subprocess.run(
+            'powershell -command "(New-Object -ComObject Shell.Application).ToggleDesktop()"',
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        play_sound("windows_minimized")
+        return True
 
 
     isBadWord = any(bad_word in text_lower for bad_word in ["тупой", "идиот", "дурак", "глупый", "тупица", "тупая", "идиотка", "дура", "глупая", "сука", "сволочь", "мерзавец", "мерзавка", "тварь", "блядь", "пидор", "даун", "лох", "козёл", "козлина", "задолбал", "мудак", "мудачка", "заебал", "заебала", "пидорас", "заколебался", "умри"])
