@@ -160,13 +160,13 @@ def audio_callback(indata, frames, time_info, status):
 
 print("\n=== Джарвис ===")
 
-with sd.RawInputStream(samplerate=16000, blocksize=1200, dtype='int16', channels=1, callback=audio_callback):
+with sd.RawInputStream(samplerate=16000, blocksize=1000, dtype='int16', channels=1, callback=audio_callback):
     while True:
         if current_state == STATE_LISTENING_CMD:
             full_user_command = " ".join(command_buffer).strip() if command_buffer else ""
             word_count = len(full_user_command.split()) if full_user_command else 0
             
-            pause_timeout = 0.25 if word_count < 4 else 0.4
+            pause_timeout = 0.35 if word_count < 4 else 0.5
             
             if time.time() - last_speech_time > pause_timeout:
                 if command_buffer:

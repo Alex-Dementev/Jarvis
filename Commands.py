@@ -30,6 +30,8 @@ SOUNDS_DIR = os.path.join("Audios", "LocalCommands")
 
 Voice = VoiceConverter()
 
+current_sound = 0
+
 def play_sound(sound_name: str, wait_to_finish: bool = True) -> bool:
     possible_extensions = ["", ".wav"]
     file_path = None
@@ -139,8 +141,7 @@ def process_command(text: str) -> bool:
     word_count = len(words)
 
     if word_count > 6: 
-        play_sound("unknown_command")
-        print("ДЖАРВИС: Мне нужно подумать, сэр!\n")
+        unknown_command()
         return False
 
 
@@ -233,14 +234,14 @@ def process_command(text: str) -> bool:
             play_sound("sleep_mode_1")
             ctypes.windll.PowrProf.SetSuspendState(0, 0, 0)
             return True
-        elif "спокойной ночи" in text_lower or "доброй ночи" in text_lower or "покойной ночи" in text_lower:
+        elif ("покойн" in text_lower and "ноч" in text_lower):
             print(f"ДЖАРВИС: Дристать вам пол ночи, Сэр!\n")
             play_sound("sleep_mode_2")
             ctypes.windll.PowrProf.SetSuspendState(0, 0, 0)
             return True
 
         if word_count < 6:
-            if "место на диске" in text_lower or "места на диске" in text_lower:
+            if ("мест" in text_lower and "на" in text_lower and "диск" in text_lower):
                 free_gbC = get_free_space("C")
                 free_gbD = get_free_space("D")
                 print(f"ДЖАRВИС: На диске C: свободно {free_gbC} гигабайт. На диске D: свободно {free_gbD} гигабайт.")
@@ -248,32 +249,32 @@ def process_command(text: str) -> bool:
                 return True
 
 
-    if ("громче" in text_lower or "погромче" in text_lower or "прибавь звук" in text_lower or "увеличь громкость" in text_lower) and word_count < 5:
+    if ("громче" in text_lower or "прибавь звук" in text_lower or ("увел" in text_lower and "гром" in text_lower) or ("увел" in text_lower and "звук" in text_lower) or ("больш" in text_lower and "звук" in text_lower)) and word_count < 5:
         print("ДЖАРВИС: Делаю громче, сэр!")
         change_volume_ps("up", steps=5)
         play_sound("volume_up")
         return True
 
-    if ("тише" in text_lower or "потише" in text_lower or "убавь звук" in text_lower or "уменьши громкость" in text_lower) and word_count < 5:
+    if ("тише" in text_lower or "убавь звук" in text_lower or ("умен" in text_lower and "гром" in text_lower) or ("умен" in text_lower and "звук" in text_lower)) and word_count < 5:
         print("ДЖАРВИС: Делаю тише, сэр!")
         change_volume_ps("down", steps=5)
         play_sound("volume_down")
         return True
 
-    if ("светлее" in text_lower or "ярче" in text_lower or "прибавь яркость" in text_lower or "увеличь яркость" in text_lower) and word_count < 5:
+    if (("днев" in text_lower and "режим" in text_lower) or ("ярк" in text_lower and "режим" in text_lower) or ("ярк" in text_lower and "макс" in text_lower)) and word_count < 5:
         print("ДЖАРВИС: Увеличиваю яркость, сэр!")
-        change_brightness_ps(40)
+        change_brightness_ps(100)
         play_sound("brightness_up")
         return True
 
-    if ("тускнее" in text_lower or "тусклее" in text_lower or "темнее" in text_lower or "убавь яркость" in text_lower or "уменьши яркость" in text_lower) and word_count < 5:
+    if (("ноч" in text_lower and "режим" in text_lower) or ("ярк" in text_lower and "миним" in text_lower) or ("темн" in text_lower and "режим" in text_lower)) and word_count < 5:
         print("ДЖАРВИС: Уменьшаю яркость, сэр!")
-        change_brightness_ps(-40)
+        change_brightness_ps(-100)
         play_sound("brightness_down")
         return True
 
 
-    if ("скрою" in text_lower or "скрой" in text_lower or "сверни" in text_lower) and "окна" in text_lower and word_count < 5:
+    if ("крой" in text_lower or "закрой" in text_lower or "сверни" in text_lower) and "окн" in text_lower and word_count < 5:
         print("ДЖАРВИС: Сворачиваю все окна, сэр!")
         subprocess.run(
             'powershell -command "(New-Object -ComObject Shell.Application).ToggleDesktop()"',
@@ -297,7 +298,17 @@ def process_command(text: str) -> bool:
 
 
     
-
-    play_sound("unknown_command")
-    print("ДЖАРВИС: Мне нужно подумать, сэр!\n")
+    unknown_command()
     return False
+
+
+def unknown_command():
+    global current_sound
+    if current_sound == 0:
+        play_sound("unknown_command_1")
+        print("ДЖАРВИС: Мне нужно подумать, сэр!\n")
+        current_sound = 1
+    else:
+        play_sound("unknown_command_2")
+        print("ДЖАРВИС: Дайте мне подумать, сэр!\n")
+        current_sound = 0
