@@ -28,18 +28,15 @@ class VoiceConverter:
         print("[VoiceConverter]: Загрузка Piper TTS...")
         self.piper_voice = PiperVoice.load(PIPER_MODEL, config_path=PIPER_CONFIG)
 
-        # 2. Инициализация RVC (если библиотека доступна)
         self.has_rvc = False
 
     def _boost_bass_and_clarity(self, data: np.ndarray, rate: int) -> np.ndarray:
         """Усиливает низкие и высокие частоты."""
-        # Низкие частоты (бас)
         b_low, a_low = butter(2, 250 / (rate / 2), btype='low')
-        bass = lfilter(b_low, a_low, data) * 1.8
+        bass = lfilter(b_low, a_low, data) * 2
 
-        # Высокие частоты (чёткость)
         b_high, a_high = butter(2, 2500 / (rate / 2), btype='high')
-        treble = lfilter(b_high, a_high, data) * 1.3
+        treble = lfilter(b_high, a_high, data) * 1.4
 
         processed = data + bass + treble
 
@@ -50,14 +47,11 @@ class VoiceConverter:
         return processed.astype(np.int16)
 
     def _generate_piper_wav(self, text: str, output_path: str):
-        """Синтез аудио с помощью Piper и эквалайзера."""
         temp_raw = output_path + "_raw.wav"
 
-        # Синтез сырого звука
         with wave.open(temp_raw, "wb") as wav_file:
             self.piper_voice.synthesize_wav(text, wav_file)
 
-        # Обработка эквалайзером
         with wave.open(temp_raw, "rb") as wav_in:
             rate = wav_in.getframerate()
             frames = wav_in.readframes(wav_in.getnframes())
@@ -75,12 +69,6 @@ class VoiceConverter:
             os.remove(temp_raw)
 
     def speak(self, text: str, keep_file: bool = False):
-        """
-        Основной метод: принимает фразу, создает аудио и воспроизводит его.
-        
-        :param text: Текст для озвучки.
-        :param keep_file: Сохранять ли итоговый .wav файл после воспроизведения.
-        """
         if not text.strip():
             return
 
@@ -89,10 +77,8 @@ class VoiceConverter:
 
         target_path = temp_rvc_input if self.has_rvc else temp_audio
 
-        # 1. Генерация голоса через Piper TTS
         self._generate_piper_wav(text, target_path)
 
-        # 2. Обработка RVC (при наличии)
         final_path = temp_audio
         if self.has_rvc:
             try:
@@ -108,18 +94,15 @@ class VoiceConverter:
                 print(f"[Ошибка RVC]: {e}")
                 final_path = temp_rvc_input
 
-        # 3. Воспроизведение звука
         if os.path.exists(final_path):
             data, samplerate = sf.read(final_path)
             sd.play(data, samplerate)
-            sd.wait()  # Ожидание окончания воспроизведения
+            sd.wait()
 
-            # Удаление временных файлов, если параметр keep_file=False
             if not keep_file and os.path.exists(final_path):
                 os.remove(final_path)
 
 
-# Пример использования метода:
 if __name__ == "__main__":
     converter = VoiceConverter()
     converter.speak("Привет! Я готов воспроизвести любую вашу фразу.")

@@ -7,6 +7,8 @@ import sounddevice as sd
 import vosk
 import Commands
 import Submission
+import numpy as np
+from scipy.signal import butter, sosfilt
 from rapidfuzz import process, fuzz
 
 # Инициализируем аудиоплеер
@@ -110,13 +112,50 @@ def clean_wake_words(text: str) -> str:
             cleaned.append(word)
     return " ".join(cleaned).strip()
 
+# Фильтр голоса: убираем низкочастотный гул
+SAMPLE_RATE = 16000
+
+voice_filter = butter(
+    4,
+    [80, 5000],
+    btype="bandpass",
+    fs=SAMPLE_RATE,
+    output="sos"
+)
+
+voice_filter_state = np.zeros(
+    (voice_filter.shape[0], 2),
+    dtype=np.float32
+)
+
+
+def improve_voice(audio_bytes: bytes) -> bytes:
+    global voice_filter_state
+
+    # Байты микрофона -> числа
+    audio = np.frombuffer(audio_bytes, dtype=np.int16)
+
+    # Фильтруем, сохраняя состояние между блоками
+    filtered, voice_filter_state = sosfilt(
+        voice_filter,
+        audio.astype(np.float32),
+        zi=voice_filter_state
+    )
+
+    # Возвращаем формат, который ожидает Vosk
+    filtered = np.clip(
+        np.round(filtered), -32768, 32767
+    ).astype(np.int16)
+
+    return filtered.tobytes()
+
 def audio_callback(indata, frames, time_info, status):
     global current_state, last_speech_time, command_buffer, is_speaking
 
     if is_speaking:
         return
 
-    bytes_data = bytes(indata)
+    bytes_data = improve_voice(bytes(indata))
     
     try:
         if recognizer.AcceptWaveform(bytes_data):

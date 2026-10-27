@@ -93,8 +93,10 @@ def change_volume_ps(direction: str, steps: int = 3):
     run_powershell(script)
 
 def change_brightness_ps(step: int):
-    script = f"(Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, (Get-WmiObject -Namespace root/wmi -Class WmiMonitorBrightness).CurrentBrightness + ({step}))"
-    run_powershell(script)
+    if(step == 1):
+        run_powershell("(Get-WmiObject -Namespace root\WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, 100)")
+    else:
+        run_powershell("(Get-WmiObject -Namespace root\WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1, 0)")
 
 def get_system_status() -> str:
     cpu_usage = int(psutil.cpu_percent(interval=0.5))
@@ -184,7 +186,7 @@ def process_command(text: str) -> bool:
             return True
     
 
-    if("спасибо" in text_lower or "благoдарю" in text_lower):
+    if(("спасибо" in text_lower or "благoдарю" in text_lower) and word_count < 5):
         print("ДЖАРВИС: Всегда рад помочь, сэр!\n")
         play_sound("reach_again")
         return True
@@ -221,7 +223,7 @@ def process_command(text: str) -> bool:
 
 
     if word_count < 4:
-        if any(phrase in text_lower for phrase in ["состояние системы", "состояние систем", "нагрузка системы", "статус системы", "загрузка системы", "состояние систему", "нагрузка систему", "статус систему", "загрузка систему"]):
+        if (("состоян" in text_lower or "груз" in text_lower) and ("систем" in text_lower or "ноутбук" in text_lower or "компьютер" in text_lower)):
             status_info = get_system_status()
             print(f"ДЖАРВИС: {status_info}")
             Voice.speak(status_info)
@@ -263,13 +265,13 @@ def process_command(text: str) -> bool:
 
     if (("днев" in text_lower and "режим" in text_lower) or ("ярк" in text_lower and "режим" in text_lower) or ("ярк" in text_lower and "макс" in text_lower)) and word_count < 5:
         print("ДЖАРВИС: Увеличиваю яркость, сэр!")
-        change_brightness_ps(100)
+        change_brightness_ps(1)
         play_sound("brightness_up")
         return True
 
     if (("ноч" in text_lower and "режим" in text_lower) or ("ярк" in text_lower and "миним" in text_lower) or ("темн" in text_lower and "режим" in text_lower)) and word_count < 5:
         print("ДЖАРВИС: Уменьшаю яркость, сэр!")
-        change_brightness_ps(-100)
+        change_brightness_ps(0)
         play_sound("brightness_down")
         return True
 
